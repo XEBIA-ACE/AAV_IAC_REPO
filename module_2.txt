@@ -1,0 +1,230 @@
+# Design: User Authentication Service (S-01)
+
+## Overview
+
+This document describes the technical design approach for the User Authentication Service. Due to limited architecture context, many details are marked as TODO and require clarification.
+
+## Architecture Decisions
+
+### AD-1: Token Format (TODO: Confirm)
+
+**Decision**: Use JWT (JSON Web Tokens) for access tokens.
+
+**Rationale**:
+- Stateless validation by downstream services
+- Standard format with library support
+- Can embed user context and claims
+
+**Alternatives Considered**:
+- Opaque tokens: Require central validation, higher latency
+- Session cookies: Less suitable for API-first architecture
+
+**Status**: TODO - Confirm with architecture team
+
+### AD-2: Session Storage (TODO: Confirm)
+
+**Decision**: Use Redis for session storage.
+
+**Rationale**:
+- Fast read/write for session operations
+- Built-in TTL support for expiration
+- Supports atomic operations
+
+**Alternatives Considered**:
+- Database: Higher latency for frequent operations
+- In-memory: Not suitable for distributed deployment
+
+**Status**: TODO - Confirm with architecture team
+
+### AD-3: Password Hashing (TODO: Confirm)
+
+**Decision**: Use bcrypt or Argon2 for password hashing.
+
+**Rationale**:
+- Industry-standard secure algorithms
+- Configurable work factor
+- Resistant to rainbow table attacks
+
+**Status**: TODO - Confirm algorithm and work factor
+
+## Data Flow
+
+### Authentication Flow
+
+```
+┌──────────┐     ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Client  │────▶│ Auth Controller │────▶│ TokenService │────▶│SessionStore │
+└──────────┘     └─────────────────┘     └──────────────┘     └─────────────┘
+                         │                                            
+                         ▼                                            
+                 ┌───────────────┐     ┌──────────────┐              
+                 │UserRepository │────▶│  User Store  │              
+                 └───────────────┘     └──────────────┘              
+```
+
+### Token Validation Flow
+
+```
+┌──────────────┐     ┌─────────────────┐     ┌──────────────┐
+│ API Gateway  │────▶│  GET /verify    │────▶│ TokenService │
+└──────────────┘     └─────────────────┘     └──────────────┘
+                                                    │
+                                                    ▼
+                                            ┌─────────────┐
+                                            │SessionStore │
+                                            └─────────────┘
+```
+
+## API Design
+
+### Endpoint Summary
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | /auth/login | User authentication |
+| POST | /auth/logout | Session termination |
+| POST | /auth/refresh | Token refresh |
+| GET | /auth/verify | Token validation |
+| POST | /auth/register | User registration |
+| POST | /auth/password/reset | Initiate password reset |
+| POST | /auth/password/change | Change password |
+
+### Request/Response Patterns
+
+All endpoints follow standard patterns:
+- JSON request/response bodies
+- Bearer token authentication where required
+- Standard HTTP status codes
+- Consistent error response format
+
+### Error Response Format
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "details": {}
+  }
+}
+```
+
+## Component Design
+
+### Directory Structure (TODO: Confirm based on tech stack)
+
+```
+src/
+├── controllers/
+│   └── AuthController
+├── services/
+│   ├── TokenService
+│   ├── SessionService
+│   └── PasswordService
+├── repositories/
+│   └── UserRepository
+├── models/
+│   ├── User
+│   ├── Session
+│   └── PasswordResetToken
+├── middleware/
+│   ├── AuthMiddleware
+│   └── RateLimitMiddleware
+├── clients/
+│   └── EmailClient
+└── config/
+    └── AuthConfig
+```
+
+### Component Responsibilities
+
+| Component | Responsibility |
+|-----------|----------------|
+| AuthController | HTTP request handling, validation, response formatting |
+| TokenService | JWT generation, signing, validation |
+| SessionService | Session CRUD, expiration management |
+| PasswordService | Hashing, complexity validation, reset tokens |
+| UserRepository | User data access abstraction |
+| AuthMiddleware | Token extraction and validation for protected routes |
+| RateLimitMiddleware | Request rate limiting |
+| EmailClient | Email service integration |
+
+## Security Considerations
+
+### Token Security
+- Access tokens: Short TTL (TODO: 15 minutes recommended)
+- Refresh tokens: Longer TTL (TODO: 7 days recommended)
+- Tokens signed with secure key (TODO: key management)
+- Refresh token rotation on use
+
+### Password Security
+- Minimum complexity requirements (TODO: define policy)
+- Secure hashing with salt
+- No plaintext storage or logging
+
+### Transport Security
+- HTTPS required for all endpoints
+- Secure headers (HSTS, etc.)
+
+### Rate Limiting
+- Per-IP rate limiting on login endpoint
+- Per-user rate limiting on password reset
+- TODO: Define specific limits
+
+## Resiliency
+
+### Circuit Breaker (TODO: Confirm)
+- Apply to external service calls (Email Service)
+- Fallback behavior for non-critical operations
+
+### Retry Policy (TODO: Confirm)
+- Retry transient failures to data stores
+- Exponential backoff with jitter
+- Max retry attempts: TODO
+
+### Timeout Configuration (TODO: Confirm)
+- Database operations: TODO
+- Session store operations: TODO
+- External service calls: TODO
+
+## Observability
+
+### Logging
+- Structured logging format
+- Request/response logging (excluding sensitive data)
+- Security event logging
+
+### Metrics (TODO: Confirm)
+- Login success/failure rates
+- Token generation/validation rates
+- Session creation/invalidation rates
+- Endpoint latency percentiles
+
+### Health Checks
+- Liveness: Service is running
+- Readiness: Dependencies are available
+
+## Configuration
+
+### Environment Variables (TODO: Confirm)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| JWT_SECRET | Token signing key | Required |
+| JWT_ACCESS_TTL | Access token TTL | TODO |
+| JWT_REFRESH_TTL | Refresh token TTL | TODO |
+| SESSION_STORE_URL | Redis connection URL | Required |
+| USER_STORE_URL | Database connection URL | Required |
+| RATE_LIMIT_MAX | Max requests per window | TODO |
+| RATE_LIMIT_WINDOW | Rate limit window (seconds) | TODO |
+
+## Open Design Questions
+
+1. What is the exact tech stack (language, framework)?
+2. What is the token signing algorithm (RS256, HS256)?
+3. What is the key rotation strategy?
+4. Is refresh token rotation required?
+5. What are the exact rate limiting thresholds?
+6. What external identity providers need support?
+7. Is email verification required for registration?
+8. What is the password complexity policy?

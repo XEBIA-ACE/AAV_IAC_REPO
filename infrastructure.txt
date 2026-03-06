@@ -1,0 +1,118 @@
+# Proposal: User Authentication Service (S-01)
+
+## Overview
+
+| Field | Value |
+|-------|-------|
+| **Service ID** | S-01 |
+| **Service Name** | User Authentication Service |
+| **Organization ID** | 95bd4e80-e002-4fe5-ab71-fa85aad9fec8 |
+| **Project ID** | 79c1bee3-dd87-49c4-a4a4-e9e9298933ae |
+| **Status** | Draft |
+
+## Purpose and Business Value
+
+The User Authentication Service provides centralized identity verification and access control for the platform. It enables:
+
+1. **Secure User Access**: Ensures only verified users can access protected resources
+2. **Unified Authentication**: Single point of authentication across all platform services
+3. **Compliance**: Supports security standards and audit requirements for user access
+4. **User Experience**: Streamlined login/registration flows with session persistence
+
+## Scope
+
+### In-Scope
+
+- User login and logout operations
+- Token generation (JWT or similar) and validation
+- Session management and persistence
+- Password reset and change workflows
+- Token refresh mechanisms
+- Basic user registration flow
+- Authentication event logging
+
+### Out-of-Scope
+
+- User profile management (TODO: confirm with architecture)
+- Authorization/permissions (TODO: confirm if separate service)
+- Multi-factor authentication (TODO: confirm requirements)
+- Social login integrations (TODO: confirm requirements)
+- User data CRUD beyond authentication needs
+
+## Responsibilities
+
+| Responsibility | Description |
+|----------------|-------------|
+| Authenticate Users | Verify user credentials against stored data |
+| Manage Sessions | Create, validate, and invalidate user sessions |
+| Issue Tokens | Generate secure access and refresh tokens |
+| Validate Tokens | Verify token authenticity and expiration |
+| Password Management | Handle password reset and change requests |
+| Audit Logging | Record authentication events for security audit |
+
+## Impacted Systems
+
+### Upstream Dependencies (TODO: Confirm)
+
+| System | Interaction | Protocol |
+|--------|-------------|----------|
+| User Data Store | Read user credentials | TODO |
+| Session Store | Read/Write sessions | TODO (likely Redis) |
+| Email Service | Send password reset emails | TODO |
+| Identity Provider | External authentication | TODO (if applicable) |
+
+### Downstream Dependents (TODO: Confirm)
+
+| System | Interaction | Protocol |
+|--------|-------------|----------|
+| API Gateway | Token validation | TODO |
+| All Protected Services | Authentication verification | TODO |
+
+## Acceptance Criteria
+
+### AC-1: User Login
+- **Given** a registered user with valid credentials
+- **When** they submit login request to `POST /auth/login`
+- **Then** they receive a valid access token and refresh token
+- **And** a session is created in the session store
+
+### AC-2: User Logout
+- **Given** an authenticated user with a valid session
+- **When** they submit logout request to `POST /auth/logout`
+- **Then** their session is invalidated
+- **And** their tokens are revoked
+
+### AC-3: Token Refresh
+- **Given** a user with a valid refresh token
+- **When** they submit refresh request to `POST /auth/refresh`
+- **Then** they receive a new access token
+- **And** the old access token is invalidated
+
+### AC-4: Token Validation
+- **Given** a request with an access token
+- **When** the token is validated via `GET /auth/verify`
+- **Then** the service returns token validity status and user context
+
+### AC-5: Password Reset (TODO: Confirm flow)
+- **Given** a registered user who forgot their password
+- **When** they request password reset via `POST /auth/password/reset`
+- **Then** a reset link/code is sent to their registered email
+
+### AC-6: Password Change
+- **Given** an authenticated user
+- **When** they submit password change via `POST /auth/password/change`
+- **Then** their password is updated
+- **And** all existing sessions are invalidated
+
+## Related Features
+
+- TODO: Feature IDs not available in context
+
+## Open Questions
+
+1. What token format is required (JWT, opaque, etc.)?
+2. What is the token expiration policy?
+3. Is MFA required for this service?
+4. What external identity providers need integration?
+5. What is the session storage mechanism?
+6. What are the rate limiting requirements for auth endpoints?

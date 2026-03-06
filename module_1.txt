@@ -1,0 +1,509 @@
+# Specification: User Authentication Service (S-01)
+
+## Purpose
+
+This specification defines the behavioral contract for the User Authentication Service. It describes what the system SHALL do without prescribing implementation details.
+
+## Technologies and Runtime Stack
+
+| Aspect | Technology |
+|--------|------------|
+| Language | TODO: Not specified |
+| Framework | TODO: Not specified |
+| Data Store | TODO: Not specified |
+| Session Store | TODO: Not specified (likely Redis) |
+| Token Format | TODO: Not specified (likely JWT) |
+| Protocol | TODO: HTTP/REST assumed |
+
+## Components
+
+### AuthenticationController
+- **Purpose**: HTTP request handler for authentication endpoints
+- **Responsibilities**: Request validation, response formatting, error handling
+
+### TokenService
+- **Purpose**: Token generation and validation logic
+- **Responsibilities**: 
+  - Generate access tokens
+  - Generate refresh tokens
+  - Validate token signatures and expiration
+  - Revoke tokens
+
+### SessionService
+- **Purpose**: Session lifecycle management
+- **Responsibilities**:
+  - Create sessions on successful login
+  - Validate active sessions
+  - Invalidate sessions on logout
+  - Handle session expiration
+
+### UserRepository
+- **Purpose**: Interface to user credential data
+- **Responsibilities**:
+  - Retrieve user by username/email
+  - Verify password hash
+  - Update password
+
+### PasswordService
+- **Purpose**: Password management operations
+- **Responsibilities**:
+  - Hash passwords securely
+  - Generate reset tokens
+  - Validate password complexity
+
+### TODO: Additional Components
+- Identity Provider Client (if external IdP integration required)
+- Email Client (for password reset notifications)
+- Audit Logger (for security event logging)
+
+---
+
+## APIs
+
+### POST /auth/login
+
+**Purpose**: Authenticate user credentials and establish a session.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| username | string | Yes | User's username or email |
+| password | string | Yes | User's password |
+| remember_me | boolean | No | Extended session duration |
+
+**Outputs (Success - 200)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| access_token | string | Short-lived access token |
+| refresh_token | string | Long-lived refresh token |
+| expires_in | integer | Access token TTL in seconds |
+| token_type | string | Token type (e.g., "Bearer") |
+| user_id | string | Authenticated user identifier |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | INVALID_REQUEST | Missing or malformed fields |
+| 401 | INVALID_CREDENTIALS | Username or password incorrect |
+| 403 | ACCOUNT_LOCKED | Account locked due to failed attempts |
+| 429 | RATE_LIMITED | Too many login attempts |
+
+**Main Flow**:
+1. Validate request payload
+2. Retrieve user by username from UserRepository
+3. Verify password hash matches
+4. Generate access and refresh tokens via TokenService
+5. Create session via SessionService
+6. Log authentication event
+7. Return tokens and user context
+
+---
+
+### POST /auth/logout
+
+**Purpose**: Terminate user session and revoke tokens.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| Authorization | header | Yes | Bearer access token |
+| refresh_token | string | No | Refresh token to revoke |
+
+**Outputs (Success - 200)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| message | string | Logout confirmation |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 401 | INVALID_TOKEN | Token invalid or expired |
+
+**Main Flow**:
+1. Extract and validate access token
+2. Invalidate session via SessionService
+3. Revoke access token
+4. Revoke refresh token (if provided)
+5. Log logout event
+6. Return confirmation
+
+---
+
+### POST /auth/refresh
+
+**Purpose**: Exchange refresh token for new access token.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| refresh_token | string | Yes | Valid refresh token |
+
+**Outputs (Success - 200)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| access_token | string | New access token |
+| expires_in | integer | Access token TTL in seconds |
+| token_type | string | Token type |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 401 | INVALID_REFRESH_TOKEN | Refresh token invalid or expired |
+| 401 | SESSION_EXPIRED | Associated session no longer valid |
+
+**Main Flow**:
+1. Validate refresh token signature and expiration
+2. Verify associated session is active
+3. Generate new access token
+4. Optionally rotate refresh token
+5. Return new tokens
+
+---
+
+### GET /auth/verify
+
+**Purpose**: Validate access token and return user context.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| Authorization | header | Yes | Bearer access token |
+
+**Outputs (Success - 200)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| valid | boolean | Token validity status |
+| user_id | string | User identifier |
+| expires_at | timestamp | Token expiration time |
+| scopes | array | Token scopes/permissions |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 401 | INVALID_TOKEN | Token invalid |
+| 401 | TOKEN_EXPIRED | Token has expired |
+
+**Main Flow**:
+1. Extract token from Authorization header
+2. Validate token signature
+3. Check token expiration
+4. Verify session is active
+5. Return user context and validity
+
+---
+
+### POST /auth/register
+
+**Purpose**: Register a new user account.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | User email address |
+| username | string | TODO | Username (if separate from email) |
+| password | string | Yes | User password |
+| password_confirmation | string | Yes | Password confirmation |
+
+**Outputs (Success - 201)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| user_id | string | Created user identifier |
+| message | string | Registration confirmation |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | INVALID_REQUEST | Validation errors |
+| 409 | USER_EXISTS | Email/username already registered |
+
+**Main Flow**:
+1. Validate request payload
+2. Check email/username uniqueness
+3. Validate password complexity
+4. Hash password securely
+5. Create user record
+6. TODO: Send verification email (if required)
+7. Return confirmation
+
+---
+
+### POST /auth/password/reset
+
+**Purpose**: Initiate password reset flow.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| email | string | Yes | Registered email address |
+
+**Outputs (Success - 200)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| message | string | Generic success message (security) |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | INVALID_REQUEST | Invalid email format |
+| 429 | RATE_LIMITED | Too many reset requests |
+
+**Main Flow**:
+1. Validate email format
+2. Check if user exists (do not reveal in response)
+3. Generate secure reset token
+4. Store reset token with expiration
+5. Send reset email via Email Service
+6. Return generic success (prevent enumeration)
+
+---
+
+### POST /auth/password/change
+
+**Purpose**: Change password for authenticated user.
+
+**Inputs**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| Authorization | header | Yes | Bearer access token |
+| current_password | string | Yes | Current password |
+| new_password | string | Yes | New password |
+| new_password_confirmation | string | Yes | New password confirmation |
+
+**Outputs (Success - 200)**:
+| Field | Type | Description |
+|-------|------|-------------|
+| message | string | Password change confirmation |
+
+**Outputs (Error)**:
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | INVALID_REQUEST | Validation errors |
+| 401 | INVALID_CREDENTIALS | Current password incorrect |
+| 422 | WEAK_PASSWORD | New password doesn't meet requirements |
+
+**Main Flow**:
+1. Validate access token
+2. Verify current password
+3. Validate new password complexity
+4. Hash new password
+5. Update password in UserRepository
+6. Invalidate all existing sessions
+7. Return confirmation
+
+---
+
+## Data Models
+
+### User (TODO: Confirm schema)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | UUID | Yes | Unique user identifier |
+| email | string | Yes | User email (unique) |
+| username | string | TODO | Username (if applicable) |
+| password_hash | string | Yes | Hashed password |
+| created_at | timestamp | Yes | Account creation time |
+| updated_at | timestamp | Yes | Last update time |
+| locked_at | timestamp | No | Account lock time |
+| failed_attempts | integer | No | Failed login count |
+
+**Invariants**:
+- Email MUST be unique across all users
+- Password hash MUST use secure algorithm (TODO: specify)
+- Failed attempts SHOULD reset on successful login
+
+### Session (TODO: Confirm schema)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | UUID | Yes | Session identifier |
+| user_id | UUID | Yes | Associated user |
+| access_token_hash | string | Yes | Hashed access token |
+| refresh_token_hash | string | Yes | Hashed refresh token |
+| created_at | timestamp | Yes | Session creation time |
+| expires_at | timestamp | Yes | Session expiration |
+| ip_address | string | No | Client IP address |
+| user_agent | string | No | Client user agent |
+
+**Invariants**:
+- Session MUST be invalidated after expires_at
+- Session MUST be invalidated on explicit logout
+
+### PasswordResetToken (TODO: Confirm schema)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| id | UUID | Yes | Token identifier |
+| user_id | UUID | Yes | Associated user |
+| token_hash | string | Yes | Hashed reset token |
+| created_at | timestamp | Yes | Token creation time |
+| expires_at | timestamp | Yes | Token expiration |
+| used_at | timestamp | No | Token usage time |
+
+**Invariants**:
+- Token MUST be single-use
+- Token MUST expire after configured duration (TODO: specify)
+
+---
+
+## Dependency Interactions
+
+### User Data Store (TODO: Confirm)
+
+| Operation | Protocol | Payload | Error Handling |
+|-----------|----------|---------|----------------|
+| Get user by email | TODO | User query | Return null if not found |
+| Update password | TODO | User ID, hash | Retry on transient failure |
+| Create user | TODO | User object | Fail on duplicate |
+
+### Session Store (TODO: Confirm - likely Redis)
+
+| Operation | Protocol | Payload | Error Handling |
+|-----------|----------|---------|----------------|
+| Create session | TODO | Session object | Retry with backoff |
+| Get session | TODO | Session ID | Return null if expired |
+| Delete session | TODO | Session ID | Idempotent delete |
+| Delete user sessions | TODO | User ID | Bulk invalidation |
+
+### Email Service (TODO: Confirm)
+
+| Operation | Protocol | Payload | Error Handling |
+|-----------|----------|---------|----------------|
+| Send reset email | TODO | Email, reset link | Async, retry on failure |
+
+---
+
+## Key Flows
+
+### Login Flow
+
+```
+1. Client submits credentials to POST /auth/login
+2. AuthenticationController validates request format
+3. UserRepository retrieves user by username/email
+4. PasswordService verifies password hash
+5. IF password invalid: increment failed_attempts, check lock threshold
+6. TokenService generates access token (short TTL)
+7. TokenService generates refresh token (long TTL)
+8. SessionService creates session with token hashes
+9. AuditLogger records successful login event
+10. Return tokens and user context to client
+```
+
+### Token Refresh Flow
+
+```
+1. Client submits refresh token to POST /auth/refresh
+2. TokenService validates refresh token signature
+3. TokenService checks refresh token expiration
+4. SessionService verifies session is still active
+5. TokenService generates new access token
+6. OPTIONAL: Rotate refresh token for security
+7. Return new access token to client
+```
+
+### Password Reset Flow
+
+```
+1. Client submits email to POST /auth/password/reset
+2. UserRepository checks if user exists
+3. PasswordService generates secure reset token
+4. Store reset token with expiration (TODO: duration)
+5. EmailService sends reset email asynchronously
+6. Return generic success message
+7. User clicks reset link with token
+8. Client submits new password with token (TODO: endpoint)
+9. Validate reset token and expiration
+10. Update password and invalidate reset token
+```
+
+---
+
+## Requirements
+
+### Requirement: Secure Credential Storage
+
+The service SHALL store passwords using a secure one-way hash algorithm.
+
+#### Scenario: Password Hashing on Registration
+- **Given** a new user registration request
+- **When** the password is stored
+- **Then** it MUST be hashed using a secure algorithm (TODO: specify bcrypt/argon2)
+- **And** the plaintext password MUST NOT be stored or logged
+
+#### Scenario: Password Verification on Login
+- **Given** a login request with credentials
+- **When** the password is verified
+- **Then** the service MUST compare against the stored hash
+- **And** MUST use constant-time comparison to prevent timing attacks
+
+### Requirement: Token Security
+
+The service SHALL issue secure, time-limited tokens.
+
+#### Scenario: Access Token Generation
+- **Given** a successful authentication
+- **When** an access token is generated
+- **Then** it MUST include user identifier and expiration
+- **And** it MUST be signed with a secure key
+- **And** it SHOULD have a short TTL (TODO: specify, e.g., 15 minutes)
+
+#### Scenario: Refresh Token Generation
+- **Given** a successful authentication
+- **When** a refresh token is generated
+- **Then** it MUST be cryptographically random
+- **And** it MUST have a longer TTL than access tokens (TODO: specify)
+- **And** it SHOULD be rotated on use
+
+### Requirement: Brute Force Protection
+
+The service SHALL protect against brute force attacks.
+
+#### Scenario: Account Lockout
+- **Given** multiple failed login attempts for a user
+- **When** the threshold is exceeded (TODO: specify, e.g., 5 attempts)
+- **Then** the account MUST be temporarily locked
+- **And** subsequent login attempts MUST be rejected
+
+#### Scenario: Rate Limiting
+- **Given** multiple requests from the same IP
+- **When** the rate limit is exceeded
+- **Then** the service MUST return 429 Too Many Requests
+- **And** MUST include Retry-After header
+
+### Requirement: Session Management
+
+The service SHALL maintain secure session state.
+
+#### Scenario: Session Creation
+- **Given** a successful login
+- **When** a session is created
+- **Then** it MUST be stored in the session store
+- **And** it MUST have an expiration time
+
+#### Scenario: Session Invalidation on Logout
+- **Given** a logout request
+- **When** the session is invalidated
+- **Then** the session MUST be removed from the store
+- **And** associated tokens MUST be revoked
+
+#### Scenario: Session Invalidation on Password Change
+- **Given** a password change request
+- **When** the password is updated
+- **Then** all existing sessions for the user MUST be invalidated
+
+### Requirement: Audit Logging
+
+The service SHALL log security-relevant events.
+
+#### Scenario: Login Event Logging
+- **Given** a login attempt (success or failure)
+- **When** the attempt is processed
+- **Then** an audit log entry MUST be created
+- **And** it MUST include timestamp, user identifier, IP address, and result
+
+#### Scenario: Password Change Logging
+- **Given** a password change
+- **When** the change is completed
+- **Then** an audit log entry MUST be created
+- **And** it MUST NOT include the password

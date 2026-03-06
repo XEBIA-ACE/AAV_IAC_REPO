@@ -1,0 +1,291 @@
+# Implementation Tasks: User Authentication Service (S-01)
+
+## Overview
+
+This document provides a prioritized checklist of implementation tasks for the User Authentication Service. Tasks are organized by component and can be executed by IDE/AI agents.
+
+**Note**: Many tasks include TODOs due to missing architecture context. These should be clarified before implementation.
+
+---
+
+## Phase 1: Project Setup and Core Models
+
+### 1.1 Project Initialization
+- [ ] Initialize project with appropriate framework (TODO: confirm tech stack)
+- [ ] Configure build system and dependency management
+- [ ] Set up environment configuration loading
+- [ ] Configure logging framework with structured output
+- [ ] Set up test framework and coverage reporting
+
+### 1.2 Data Models
+- [ ] Create `User` model with fields: id, email, password_hash, created_at, updated_at, locked_at, failed_attempts
+- [ ] Create `Session` model with fields: id, user_id, access_token_hash, refresh_token_hash, created_at, expires_at, ip_address, user_agent
+- [ ] Create `PasswordResetToken` model with fields: id, user_id, token_hash, created_at, expires_at, used_at
+- [ ] Add model validation rules and invariants
+- [ ] TODO: Clarify additional fields required from domain experts
+
+### 1.3 Configuration
+- [ ] Create `AuthConfig` class for authentication settings
+- [ ] Define JWT configuration (secret, algorithm, TTLs) - TODO: confirm values
+- [ ] Define rate limiting configuration - TODO: confirm thresholds
+- [ ] Define password policy configuration - TODO: confirm requirements
+- [ ] Create configuration validation on startup
+
+---
+
+## Phase 2: Core Services
+
+### 2.1 Password Service
+- [ ] Implement `PasswordService.hashPassword()` using bcrypt/argon2 (TODO: confirm algorithm)
+- [ ] Implement `PasswordService.verifyPassword()` with constant-time comparison
+- [ ] Implement `PasswordService.validateComplexity()` - TODO: confirm policy
+- [ ] Implement `PasswordService.generateResetToken()` with secure random
+- [ ] Add unit tests for PasswordService
+
+### 2.2 Token Service
+- [ ] Implement `TokenService.generateAccessToken()` with JWT signing
+- [ ] Implement `TokenService.generateRefreshToken()` with secure random
+- [ ] Implement `TokenService.validateAccessToken()` with signature verification
+- [ ] Implement `TokenService.validateRefreshToken()`
+- [ ] Implement `TokenService.revokeToken()` - TODO: confirm revocation strategy
+- [ ] Configure token expiration times - TODO: confirm TTLs
+- [ ] Add unit tests for TokenService
+
+### 2.3 Session Service
+- [ ] Implement `SessionService.createSession()` with session store integration
+- [ ] Implement `SessionService.getSession()` with expiration check
+- [ ] Implement `SessionService.invalidateSession()`
+- [ ] Implement `SessionService.invalidateUserSessions()` for bulk invalidation
+- [ ] Add session TTL handling
+- [ ] Add unit tests for SessionService
+
+---
+
+## Phase 3: Data Access Layer
+
+### 3.1 User Repository
+- [ ] Implement `UserRepository.findByEmail()`
+- [ ] Implement `UserRepository.findById()`
+- [ ] Implement `UserRepository.create()`
+- [ ] Implement `UserRepository.updatePassword()`
+- [ ] Implement `UserRepository.incrementFailedAttempts()`
+- [ ] Implement `UserRepository.resetFailedAttempts()`
+- [ ] Implement `UserRepository.lockAccount()`
+- [ ] Add database connection configuration - TODO: confirm data store
+- [ ] Add integration tests for UserRepository
+
+### 3.2 Session Store Integration
+- [ ] Configure session store connection (TODO: confirm Redis)
+- [ ] Implement session serialization/deserialization
+- [ ] Implement TTL-based expiration
+- [ ] Add connection pooling and health checks
+- [ ] Add integration tests for session store
+
+### 3.3 Password Reset Token Repository
+- [ ] Implement `PasswordResetTokenRepository.create()`
+- [ ] Implement `PasswordResetTokenRepository.findByToken()`
+- [ ] Implement `PasswordResetTokenRepository.markUsed()`
+- [ ] Implement `PasswordResetTokenRepository.deleteExpired()`
+- [ ] Add integration tests
+
+---
+
+## Phase 4: HTTP Endpoints
+
+### 4.1 Authentication Controller
+- [ ] Implement `POST /auth/login` endpoint
+  - [ ] Request validation (email/username, password)
+  - [ ] Credential verification flow
+  - [ ] Token generation and response
+  - [ ] Failed attempt tracking
+  - [ ] Account lockout check
+- [ ] Implement `POST /auth/logout` endpoint
+  - [ ] Token extraction from header
+  - [ ] Session invalidation
+  - [ ] Token revocation
+- [ ] Implement `POST /auth/refresh` endpoint
+  - [ ] Refresh token validation
+  - [ ] Session verification
+  - [ ] New access token generation
+  - [ ] Optional refresh token rotation
+- [ ] Implement `GET /auth/verify` endpoint
+  - [ ] Token extraction and validation
+  - [ ] User context response
+- [ ] Add request/response DTOs with validation
+- [ ] Add controller unit tests
+
+### 4.2 Registration Controller
+- [ ] Implement `POST /auth/register` endpoint
+  - [ ] Request validation
+  - [ ] Email uniqueness check
+  - [ ] Password complexity validation
+  - [ ] User creation
+  - [ ] TODO: Email verification flow (if required)
+- [ ] Add controller unit tests
+
+### 4.3 Password Management Controller
+- [ ] Implement `POST /auth/password/reset` endpoint
+  - [ ] Email validation
+  - [ ] Reset token generation
+  - [ ] Email sending (async)
+  - [ ] Generic response (prevent enumeration)
+- [ ] Implement `POST /auth/password/change` endpoint
+  - [ ] Authentication required
+  - [ ] Current password verification
+  - [ ] New password validation
+  - [ ] Password update
+  - [ ] Session invalidation
+- [ ] TODO: Implement reset token redemption endpoint
+- [ ] Add controller unit tests
+
+---
+
+## Phase 5: Middleware and Cross-Cutting Concerns
+
+### 5.1 Authentication Middleware
+- [ ] Implement `AuthMiddleware` for protected routes
+- [ ] Extract Bearer token from Authorization header
+- [ ] Validate token and attach user context to request
+- [ ] Handle authentication errors consistently
+- [ ] Add middleware unit tests
+
+### 5.2 Rate Limiting Middleware
+- [ ] Implement `RateLimitMiddleware` - TODO: confirm library/approach
+- [ ] Configure per-IP rate limiting for login endpoint
+- [ ] Configure per-user rate limiting for password reset
+- [ ] Add Retry-After header on limit exceeded
+- [ ] Add middleware unit tests
+
+### 5.3 Error Handling
+- [ ] Create standardized error response format
+- [ ] Implement global error handler
+- [ ] Map domain errors to HTTP status codes
+- [ ] Ensure sensitive data is not leaked in errors
+- [ ] Add error handling tests
+
+### 5.4 Audit Logging
+- [ ] Implement `AuditLogger` for security events
+- [ ] Log login attempts (success/failure)
+- [ ] Log logout events
+- [ ] Log password changes
+- [ ] Log account lockouts
+- [ ] Ensure passwords are never logged
+- [ ] Add audit logging tests
+
+---
+
+## Phase 6: External Integrations
+
+### 6.1 Email Client
+- [ ] Implement `EmailClient` interface
+- [ ] Implement email service integration - TODO: confirm service
+- [ ] Create password reset email template
+- [ ] Implement async email sending
+- [ ] Add retry logic for transient failures
+- [ ] Add integration tests (with mock)
+
+### 6.2 TODO: Identity Provider Integration
+- [ ] Clarify external IdP requirements from architecture team
+- [ ] Implement IdP client if required
+- [ ] Add OAuth/OIDC flow support if required
+
+---
+
+## Phase 7: Resiliency and Observability
+
+### 7.1 Circuit Breaker
+- [ ] Add circuit breaker for email service calls - TODO: confirm library
+- [ ] Configure failure thresholds and recovery
+- [ ] Add fallback behavior for non-critical operations
+- [ ] Add circuit breaker tests
+
+### 7.2 Retry Logic
+- [ ] Implement retry with exponential backoff for data store operations
+- [ ] Configure max retry attempts - TODO: confirm values
+- [ ] Add jitter to prevent thundering herd
+- [ ] Add retry tests
+
+### 7.3 Timeout Configuration
+- [ ] Configure timeouts for database operations - TODO: confirm values
+- [ ] Configure timeouts for session store operations
+- [ ] Configure timeouts for external service calls
+- [ ] Add timeout tests
+
+### 7.4 Health Checks
+- [ ] Implement liveness endpoint (`/health/live`)
+- [ ] Implement readiness endpoint (`/health/ready`)
+- [ ] Check database connectivity in readiness
+- [ ] Check session store connectivity in readiness
+- [ ] Add health check tests
+
+### 7.5 Metrics
+- [ ] Add metrics instrumentation - TODO: confirm metrics library
+- [ ] Track login success/failure counts
+- [ ] Track token generation/validation counts
+- [ ] Track endpoint latency histograms
+- [ ] Track active session count
+- [ ] Add metrics tests
+
+---
+
+## Phase 8: Testing and Documentation
+
+### 8.1 Integration Tests
+- [ ] Create integration test suite for login flow
+- [ ] Create integration test suite for logout flow
+- [ ] Create integration test suite for token refresh flow
+- [ ] Create integration test suite for registration flow
+- [ ] Create integration test suite for password reset flow
+- [ ] Create integration test suite for password change flow
+- [ ] Add test fixtures and factories
+
+### 8.2 Security Tests
+- [ ] Test brute force protection (account lockout)
+- [ ] Test rate limiting behavior
+- [ ] Test token expiration handling
+- [ ] Test session invalidation on password change
+- [ ] Test password complexity validation
+- [ ] Test against common vulnerabilities (timing attacks, enumeration)
+
+### 8.3 Documentation
+- [ ] Generate OpenAPI specification from endpoints
+- [ ] Document authentication flows
+- [ ] Document error codes and responses
+- [ ] Document configuration options
+- [ ] Create runbook for common operations
+
+---
+
+## Phase 9: Deployment Preparation
+
+### 9.1 Configuration Management
+- [ ] Create environment-specific configuration files
+- [ ] Document required environment variables
+- [ ] Add configuration validation on startup
+- [ ] Create secrets management approach - TODO: confirm
+
+### 9.2 Containerization
+- [ ] Create Dockerfile - TODO: confirm container requirements
+- [ ] Optimize image size
+- [ ] Configure health check in container
+- [ ] Add container security scanning
+
+### 9.3 CI/CD
+- [ ] Configure build pipeline - TODO: confirm CI/CD platform
+- [ ] Add automated testing in pipeline
+- [ ] Add security scanning in pipeline
+- [ ] Configure deployment automation
+
+---
+
+## Open Tasks (Require Clarification)
+
+- [ ] **TODO**: Clarify exact tech stack (language, framework) from architecture team
+- [ ] **TODO**: Clarify token format and signing algorithm from security team
+- [ ] **TODO**: Clarify password complexity requirements from product team
+- [ ] **TODO**: Clarify rate limiting thresholds from security team
+- [ ] **TODO**: Clarify external identity provider requirements
+- [ ] **TODO**: Clarify email verification requirements for registration
+- [ ] **TODO**: Clarify session store technology and configuration
+- [ ] **TODO**: Clarify metrics and monitoring platform
+- [ ] **TODO**: Clarify deployment environment and CI/CD platform
